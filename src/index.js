@@ -36,22 +36,56 @@ function parseAllowedOrigins() {
 
 const allowedOrigins = parseAllowedOrigins();
 
-app.use(cors({
+function isAllowedOrigin(origin) {
+    const normalized = normalizeOrigin(origin);
+    if (allowedOrigins.has(normalized) || /^https:\/\/[a-z0-9-]+\.github\.io$/i.test(normalized)) {
+        return true;
+    }
+
+    try {
+        const parsed = new URL(normalized);
+        const host = String(parsed.hostname || '').toLowerCase();
+
+        if (parsed.protocol === 'http:' && (host === 'localhost' || host === '127.0.0.1' || isPrivateIpv4Address(host))) {
+            return true;
+        }
+
+        if (parsed.protocol === 'https:' && host.endsWith('.onrender.com')) {
+            return true;
+        }
+
+        return false;
+    } catch (error) {
+        return false;
+    }
+}
+
+app.use((req, res, next) => {
+    if (req.headers['access-control-request-private-network'] === 'true') {
+        res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    }
+
+    next();
+});
+
+const corsOptions = {
     origin: (origin, callback) => {
         if (!origin) {
             callback(null, true);
             return;
         }
 
-        const normalized = normalizeOrigin(origin);
-        if (allowedOrigins.has(normalized) || /^https:\/\/[a-z0-9-]+\.github\.io$/i.test(normalized)) {
+        if (isAllowedOrigin(origin)) {
             callback(null, true);
             return;
         }
 
         callback(new Error('Origin is not allowed'));
     },
-}));
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '1mb' }));
 
 function parseIpv4Address(value) {
