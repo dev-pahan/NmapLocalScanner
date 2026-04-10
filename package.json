@@ -3,13 +3,24 @@
   "version": "1.0.0",
   "description": "Local nmap scanner bridge for HCG dashboard",
   "main": "src/index.js",
+  "bin": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "check": "node --check src/index.js"
+    "check": "node --check src/index.js",
+    "build:win": "npx pkg . --targets node18-win-x64 --output dist/NmapLocalScanner.exe"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [],
+    "targets": [
+      "node18-win-x64"
+    ]
   }
 }
