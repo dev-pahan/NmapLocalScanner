@@ -17,15 +17,14 @@ The service listens on `http://127.0.0.1:47633` and is designed for localhost us
 - Node.js 18+
 - Nmap installed locally
 
-## Quick Start (Development)
+## Quick Start for End Users
 
-```powershell
-cd NmapLocalScanner
-npm install
-npm start
-```
-
-Keep the scanner running while you use live scans in HCG.
+1. Install Nmap if it is not already installed.
+2. Download the latest NmapLocalScanner release.
+3. Extract the files to a folder of your choice.
+4. Run `NmapLocalScanner.exe`.
+5. Allow any Windows permission prompts if they appear.
+6. Keep the scanner running while you use live scans in HCG.
 
 ## Build Windows EXE (Local Machine)
 
@@ -41,7 +40,7 @@ Output binary:
 
 ## Nmap Setup Helper Mode
 
-The app includes a manual helper mode (no automatic system changes):
+The app includes a manual helper mode for users who need setup guidance (no automatic system changes):
 
 ```powershell
 node src/index.js --setup-nmap
@@ -59,6 +58,8 @@ This mode prints:
 - safe install guidance,
 - PATH and `NMAP_PATH` guidance,
 - recommended non-admin run mode.
+
+For everyday use, users should launch `NmapLocalScanner.exe` directly after installing Nmap.
 
 ## Release Checklist (Manual)
 

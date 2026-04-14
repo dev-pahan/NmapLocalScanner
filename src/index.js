@@ -427,8 +427,8 @@ function printManualNmapSetupGuide() {
     console.log('  nmap --version');
 
     console.log('');
-    console.log('Step 4: Run scanner from a standard (non-admin) terminal');
-    console.log('  npm start');
+    console.log('Step 4: Start NmapLocalScanner.exe from a standard (non-admin) terminal');
+    console.log('  NmapLocalScanner.exe');
     console.log('');
 }
 
