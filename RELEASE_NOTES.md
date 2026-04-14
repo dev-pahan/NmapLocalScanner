@@ -30,5 +30,5 @@ This release includes the latest scanner source code from the `main` branch, alo
 ## Checksum
 
 ```bash
-44F06F9108E991C22BB7A9A046A5C721EEBB61E2901CCBE94D4C2534A50AE6B8 *NmapLocalScanner.exe
+9223A8ACE0873AF449183CEB47D6932C9ED0599E11A2FBF89EE77D4A0A02FC46 *NmapLocalScanner.exe
 ```
