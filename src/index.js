@@ -320,6 +320,22 @@ function normalizeOriginUrl(value) {
     }
 }
 
+function isLoopbackHost(hostname) {
+    const normalized = String(hostname || '').trim().toLowerCase();
+    return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function isEquivalentLocalOrigin(upload, backend) {
+    const protocolsMatch = String(upload.protocol || '').toLowerCase() === String(backend.protocol || '').toLowerCase();
+    const portsMatch = String(upload.port || '') === String(backend.port || '');
+
+    if (!protocolsMatch || !portsMatch) {
+        return false;
+    }
+
+    return isLoopbackHost(upload.hostname) && isLoopbackHost(backend.hostname);
+}
+
 function isAllowedUploadDestination(uploadUrl, backendOrigin) {
     try {
         const upload = new URL(String(uploadUrl || '').trim());
@@ -333,7 +349,13 @@ function isAllowedUploadDestination(uploadUrl, backendOrigin) {
         const normalizedBackendOrigin = normalizeOriginUrl(backendOrigin);
         if (normalizedBackendOrigin) {
             const backend = new URL(normalizedBackendOrigin);
-            return upload.origin.toLowerCase() === backend.origin.toLowerCase();
+            if (upload.origin.toLowerCase() === backend.origin.toLowerCase()) {
+                return true;
+            }
+
+            // Accept loopback-equivalent origins so localhost and 127.0.0.1 can
+            // safely fallback to each other when one resolver path is unavailable.
+            return isEquivalentLocalOrigin(upload, backend);
         }
 
         return isLocalUploadHost || uploadHost.endsWith('.onrender.com');
