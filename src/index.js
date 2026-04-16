@@ -351,6 +351,110 @@ function isValidUploadPath(uploadUrl) {
     }
 }
 
+function dedupePreserveOrder(values = []) {
+    const seen = new Set();
+    const ordered = [];
+
+    values.forEach((value) => {
+        const normalized = String(value || '').trim();
+        if (!normalized || seen.has(normalized)) {
+            return;
+        }
+
+        seen.add(normalized);
+        ordered.push(normalized);
+    });
+
+    return ordered;
+}
+
+function buildUploadCandidates(uploadUrl, backendOrigin) {
+    const candidates = [String(uploadUrl || '').trim()];
+
+    const normalizedBackendOrigin = normalizeOriginUrl(backendOrigin);
+    if (normalizedBackendOrigin) {
+        candidates.push(`${normalizedBackendOrigin}/api/local-scanner/results`);
+    }
+
+    try {
+        const upload = new URL(String(uploadUrl || '').trim());
+
+        if (upload.hostname === 'localhost') {
+            const localhostToIp = new URL(upload.toString());
+            localhostToIp.hostname = '127.0.0.1';
+            candidates.push(localhostToIp.toString());
+        }
+
+        if (upload.hostname === '127.0.0.1') {
+            const ipToLocalhost = new URL(upload.toString());
+            ipToLocalhost.hostname = 'localhost';
+            candidates.push(ipToLocalhost.toString());
+        }
+
+        const isLikelyLocalHost = upload.protocol === 'http:'
+            && (isPrivateIpv4Address(upload.hostname)
+                || upload.hostname.endsWith('.local')
+                || upload.hostname.endsWith('.internal')
+                || upload.hostname.endsWith('.lan'));
+
+        if (isLikelyLocalHost) {
+            const localhostFallback = new URL(upload.toString());
+            localhostFallback.hostname = 'localhost';
+            candidates.push(localhostFallback.toString());
+
+            const loopbackFallback = new URL(upload.toString());
+            loopbackFallback.hostname = '127.0.0.1';
+            candidates.push(loopbackFallback.toString());
+        }
+    } catch (error) {
+        // Ignore malformed fallback candidates; request validation handles invalid input.
+    }
+
+    return dedupePreserveOrder(candidates).filter((candidate) => {
+        return isHttpsOrHttpUrl(candidate)
+            && isValidUploadPath(candidate)
+            && isAllowedUploadDestination(candidate, backendOrigin);
+    });
+}
+
+async function uploadScanResultWithFallback(candidates, body) {
+    let lastNetworkError = null;
+    const attemptedUrls = [];
+
+    for (const candidate of candidates) {
+        try {
+            attemptedUrls.push(candidate);
+            console.log(`[local-scanner] upload attempt url=${candidate}`);
+
+            const response = await fetch(candidate, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body,
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            return {
+                response,
+                payload,
+                url: candidate,
+            };
+        } catch (error) {
+            const reason = error?.cause?.message || error?.message || 'unknown fetch error';
+            console.warn(`[local-scanner] upload network failure url=${candidate} reason=${reason}`);
+            lastNetworkError = error;
+        }
+    }
+
+    if (lastNetworkError) {
+        const reason = lastNetworkError?.cause?.message || lastNetworkError?.message || 'unknown fetch error';
+        throw new Error(`Upload failed for all destinations (${attemptedUrls.join(', ')}): ${reason}`);
+    }
+
+    throw new Error('No valid upload destinations available');
+}
+
 function isWindowsProcessElevated() {
     if (process.platform !== 'win32') {
         return false;
@@ -544,23 +648,23 @@ app.post('/scan', async (req, res) => {
     try {
         const scanResult = await runNmapScan({ target, ports });
         console.log(`[local-scanner] scan complete target=${target} openPorts=${scanResult.openPorts.length}`);
-        const uploadResponse = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
+        const uploadCandidates = buildUploadCandidates(uploadUrl, backendOrigin);
+        const requestBody = JSON.stringify({
+            bridgeToken,
+            scanResult: {
+                ...scanResult,
+                scanDurationMs: Date.now() - startedAt,
             },
-            body: JSON.stringify({
-                bridgeToken,
-                scanResult: {
-                    ...scanResult,
-                    scanDurationMs: Date.now() - startedAt,
-                },
-            }),
         });
 
-        const uploadPayload = await uploadResponse.json().catch(() => ({}));
+        const {
+            response: uploadResponse,
+            payload: uploadPayload,
+            url: uploadedUrl,
+        } = await uploadScanResultWithFallback(uploadCandidates, requestBody);
+
         if (!uploadResponse.ok) {
-            console.error(`[local-scanner] upload failed status=${uploadResponse.status} target=${target}`);
+            console.error(`[local-scanner] upload failed status=${uploadResponse.status} target=${target} url=${uploadedUrl}`);
             res.status(uploadResponse.status).json({
                 success: false,
                 message: uploadPayload?.message || 'Failed to upload local scan result',
@@ -568,7 +672,7 @@ app.post('/scan', async (req, res) => {
             return;
         }
 
-        console.log(`[local-scanner] upload complete status=${uploadResponse.status} target=${target}`);
+        console.log(`[local-scanner] upload complete status=${uploadResponse.status} target=${target} url=${uploadedUrl}`);
 
         res.status(200).json(uploadPayload);
     } catch (error) {
